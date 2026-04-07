@@ -281,15 +281,13 @@ async fn probe_url_with_retry(
 ) -> ProbeResult {
     let mut last_result = probe_url(client, url_str).await;
 
-    // Only retry if it's a connection/timeout error (status >= 400)
-    // Don't retry for successful responses or valid HTTP error codes (like 404)
-    if !last_result.success && last_result.status >= 400 {
+    // Only retry true network failures (success = false), avoiding retries on actual HTTP responses like 403/404
+    if !last_result.success {
         for _attempt in 1..=max_retries {
             tokio::time::sleep(retry_delay).await;
             let retry_result = probe_url(client, url_str).await;
 
-            // Use retry result if it succeeds or gets any valid HTTP response
-            if retry_result.success || retry_result.status < 400 {
+            if retry_result.success {
                 return retry_result;
             }
 
@@ -325,7 +323,7 @@ async fn probe_url(client: &reqwest::Client, url_str: &str) -> ProbeResult {
                 status_text: format!("{} {}", status_code, status_text),
                 length: actual_length,
                 content_type,
-                success: status.is_success(),
+                success: true, // Mark any valid HTTP server response as a successful probe
             }
         }
         Err(e) => {
